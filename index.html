@@ -128,7 +128,7 @@
             });
 
         // Add Sudan outline (sudan_adm0.json) and bring it to the front
-        fetch('/data/sudan_adm0.json')
+        fetch('/sudan-completness-map/data/sudan_adm0.json')
             .then(response => response.json())
             .then(data => {
                 var sudanOutline = L.geoJson(data, {

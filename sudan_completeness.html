@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudan Completeness Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <style>
+        #map { height: 600px; }
+        .legend {
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            line-height: 18px;
+            color: #555;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([14.8628, 30.2176], 6); // Centered on Sudan
+
+        // Add the CartoDB Positron base layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        // Function to get color based on the completeness percentage
+        function getColor(d) {
+            return d > 90 ? '#006d2c' : // Dark green for highest values
+                   d > 80 ? '#2ca25f' : // Medium green for high values
+                   d > 70 ? '#66c2a4' : // Light green for medium-high values
+                   d > 50 ? '#fdcc8a' : // Light orange for medium values
+                   d > 30 ? '#fc8d59' : // Medium orange for low-medium values
+                   d > 10 ? '#e34a33' : // Dark orange for low values
+                   d > 0  ? '#b30000' : // Dark red for almost no data
+                            '#800026';  // Very dark red for no data
+        }
+
+        // Function to style the GeoJSON features
+        function style(feature) {
+            return {
+                fillColor: getColor(feature.properties['results_cleaned_adm3_completness-percentage']),
+                weight: 1, // Thinner border
+                opacity: 1,
+                color: 'white', // Solid border color
+                dashArray: '', // Remove dashes (solid line)
+                fillOpacity: 0.7
+            };
+        }
+
+        // Function to highlight feature on mouseover
+        function highlightFeature(e) {
+            var layer = e.target;
+
+            layer.setStyle({
+                weight: 3, // Slightly thicker border on hover
+                color: '#666',
+                dashArray: '',
+                fillOpacity: 0.7
+            });
+
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                layer.bringToFront();
+            }
+        }
+
+        // Function to reset highlight on mouseout
+        function resetHighlight(e) {
+            geojson.resetStyle(e.target);
+        }
+
+        // Function to zoom to feature on click
+        function zoomToFeature(e) {
+            map.fitBounds(e.target.getBounds());
+        }
+
+        // Function to handle feature click (popup)
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight,
+            });
+
+            // Format the building count as an integer with toLocaleString()
+            var buildingCount = parseInt(feature.properties['results_cleaned_adm3_osmBuildingsCount']);
+            var formattedBuildingCount = buildingCount.toLocaleString();
+
+            var buildingCountEstimate = parseInt(feature.properties['results_cleaned_adm3_aiBuildingsCountEstimation']);
+            var formattedBuildingCountEstimate = buildingCountEstimate.toLocaleString();        
+
+            // Create the popup content
+            var popupContent = `
+                <strong style="font-size: 18px;">${feature.properties.NAME_3}</strong><br>
+                <strong>OSM Completeness based on AI:</strong> ${feature.properties['results_cleaned_adm3_completness-percentage']}%<br>
+                <strong>OSM Number of Buildings:</strong> ${formattedBuildingCount}<br>
+                <strong>AI Estimate Number of Buildings:</strong> ${formattedBuildingCountEstimate}
+            `;
+
+            // Bind the popup to the layer
+            layer.bindPopup(popupContent);
+        }
+
+        // Load the GeoJSON data and add it to the map
+        var geojson = L.geoJson(null, {
+            style: style,
+            onEachFeature: onEachFeature
+        }).addTo(map);
+
+        // Fetch the GeoJSON file for Sudan completeness data
+        fetch('/data/sudan_completness_adm3.geojson')
+            .then(response => response.json())
+            .then(data => {
+                geojson.addData(data);
+            });
+
+        // Add Sudan outline (sudan_adm0.json) and bring it to the front
+        fetch('/data/sudan_adm0.json')
+            .then(response => response.json())
+            .then(data => {
+                var sudanOutline = L.geoJson(data, {
+                    style: {
+                        fillColor: 'none', // No fill
+                        weight: 3, // Thick border
+                        color: '#000', // Black border
+                        opacity: 1,
+                        fillOpacity: 0 // No fill
+                    }
+                }).addTo(map);
+
+                // Bring the Sudan outline to the front
+                sudanOutline.bringToFront();
+            });
+
+        // Add a legend
+        var legend = L.control({ position: 'bottomright' });
+
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'legend');
+            var grades = [0, 10, 30, 50, 70, 80, 90];
+            var labels = [];
+            var from, to;
+
+            // Create a title element
+            var title = L.DomUtil.create('h2', '', div);
+            title.innerHTML = 'Comp. <br>Estimate';
+
+            // Loop through the grades and generate a label with a colored square for each interval
+            for (var i = 0; i < grades.length; i++) {
+                from = grades[i];
+                to = grades[i + 1];
+
+                labels.push(
+                    '<i style="background:' + getColor(from + 1) + '"></i> ' +
+                    from + (to ? '–' + to : '+') + '%'
+                );
+            }
+
+            // Add the labels to the div
+            div.innerHTML += labels.join('<br>');
+            return div;
+        };
+
+
+        legend.addTo(map);
+    </script>
+</body>
+</html>

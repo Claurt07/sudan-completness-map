@@ -121,7 +121,7 @@
         }).addTo(map);
 
         // Fetch the GeoJSON file for Sudan completeness data
-        fetch('/data/sudan_completness_adm3.geojson')
+        fetch('/sudan-completness-map/data/sudan_completness_adm3.geojson')
             .then(response => response.json())
             .then(data => {
                 geojson.addData(data);
